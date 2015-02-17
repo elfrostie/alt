@@ -4,6 +4,7 @@ var Dispatcher = require("flux").Dispatcher;
 var EventEmitter = require("eventemitter3");
 var Symbol = require("es-symbol");
 var assign = require("object-assign");
+var Immutable = require("immutable");
 
 var now = Date.now();
 var VariableSymbol = function (desc) {
@@ -45,7 +46,7 @@ var getInternalMethods = function (obj, excluded) {
 
 var AltStore = (function () {
   function AltStore(dispatcher, state) {
-    var _this5 = this;
+    var _this7 = this;
     babelHelpers.classCallCheck(this, AltStore);
 
     this[EE] = new EventEmitter();
@@ -58,7 +59,7 @@ var AltStore = (function () {
     this.dispatchToken = dispatcher.register(function (payload) {
       if (state[LISTENERS][payload.action]) {
         var result = state[LISTENERS][payload.action](payload.data);
-        result !== false && _this5.emitChange();
+        result !== false && _this7.emitChange();
       }
     });
 
@@ -91,8 +92,7 @@ var AltStore = (function () {
     },
     getState: {
       value: function getState() {
-        // Copy over state so it's RO.
-        return assign({}, this[STATE_CONTAINER]);
+        return this[STATE_CONTAINER].state;
       },
       writable: true,
       configurable: true
@@ -151,7 +151,7 @@ var StoreMixin = {
   },
 
   bindActions: function bindActions(actions) {
-    var _this5 = this;
+    var _this7 = this;
     Object.keys(actions).forEach(function (action) {
       var symbol = actions[action];
       var matchFirstCharacter = /./;
@@ -160,19 +160,19 @@ var StoreMixin = {
       });
       var handler = null;
 
-      if (_this5[action] && _this5[assumedEventHandler]) {
+      if (_this7[action] && _this7[assumedEventHandler]) {
         // If you have both action and onAction
         throw new ReferenceError("You have multiple action handlers bound to an action: " + ("" + action + " and " + assumedEventHandler));
-      } else if (_this5[action]) {
+      } else if (_this7[action]) {
         // action
-        handler = _this5[action];
-      } else if (_this5[assumedEventHandler]) {
+        handler = _this7[action];
+      } else if (_this7[assumedEventHandler]) {
         // onAction
-        handler = _this5[assumedEventHandler];
+        handler = _this7[assumedEventHandler];
       }
 
       if (handler) {
-        _this5.bindAction(symbol, handler);
+        _this7.bindAction(symbol, handler);
       }
     });
   },
@@ -183,8 +183,22 @@ var StoreMixin = {
     }
     tokens = Array.isArray(tokens) ? tokens : [tokens];
     this.dispatcher.waitFor(tokens);
-  }
-};
+  },
+
+  defineRecord: function defineRecord(record) {
+    var recordType = Immutable.Record(record);
+    this.state = new recordType();
+    // this.setState automatically converts mutable data structures (e.g. [] and {}) to their immutable
+    // counterparts. We want the state to be converted even before the store call this.setState explicitly.
+    this.setState(record);
+  },
+
+  setState: function setState(state) {
+    if (!this.state) {
+      throw new Error("You must define a record with this.defineRecord(record)");
+    }
+    this.state = this.state.merge(state);
+  } };
 
 var setAppState = function (instance, data, onStore) {
   var obj = JSON.parse(data);
@@ -244,7 +258,7 @@ var Alt = (function () {
     },
     createStore: {
       value: function createStore(StoreModel, iden) {
-        var _this5 = this;
+        var _this7 = this;
         var key = iden || StoreModel.displayName || StoreModel.name;
         // Creating a class here so we don't overload the provided store's
         // prototype with the mixin behaviour and I'm extending from StoreModel
@@ -268,7 +282,7 @@ var Alt = (function () {
           alt: this,
           dispatcher: this.dispatcher,
           getInstance: function () {
-            return _this5.stores[key];
+            return _this7.stores[key];
           }
         });
 
@@ -289,7 +303,7 @@ var Alt = (function () {
     },
     createActions: {
       value: function createActions(ActionsClass) {
-        var _this5 = this;
+        var _this7 = this;
         var exportObj = arguments[1] === undefined ? {} : arguments[1];
         var actions = assign({}, getInternalMethods(ActionsClass.prototype, builtInProto));
         var key = ActionsClass.displayName || ActionsClass.name;
@@ -336,7 +350,7 @@ var Alt = (function () {
           var actionName = Symbol("" + key + "#" + action);
 
           // Wrap the action so we can provide a dispatch method
-          var newAction = new ActionCreator(_this5, actionName, actions[action], obj);
+          var newAction = new ActionCreator(_this7, actionName, actions[action], obj);
 
           // Set all the properties on action
           obj[action] = newAction[ACTION_HANDLER];

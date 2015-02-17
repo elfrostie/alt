@@ -4,6 +4,7 @@ let Dispatcher = require('flux').Dispatcher
 let EventEmitter = require('eventemitter3')
 let Symbol = require('es-symbol')
 let assign = require('object-assign')
+let Immutable = require('immutable');
 
 let now = Date.now()
 let VariableSymbol = (desc) => Symbol(`${now}${desc}`)
@@ -75,8 +76,7 @@ class AltStore {
   }
 
   getState() {
-    // Copy over state so it's RO.
-    return assign({}, this[STATE_CONTAINER])
+    return this[STATE_CONTAINER].state;
   }
 }
 
@@ -159,7 +159,23 @@ let StoreMixin = {
     }
     tokens = Array.isArray(tokens) ? tokens : [tokens]
     this.dispatcher.waitFor(tokens)
-  }
+  },
+
+  defineRecord(record) {
+  	  let recordType = Immutable.Record(record);
+  	  this.state = new recordType();
+  	  // this.setState automatically converts mutable data structures (e.g. [] and {}) to their immutable
+  	  // counterparts. We want the state to be converted even before the store call this.setState explicitly. 
+  	  this.setState(record);
+  },
+
+  setState(state) {
+  	  if (!this.state) {
+  	  	  throw new Error("You must define a record with this.defineRecord(record)");
+	  }
+	  this.state = this.state.merge(state);
+  },
+
 }
 
 let setAppState = (instance, data, onStore) => {
